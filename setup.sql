@@ -28,7 +28,7 @@ GRANT USAGE, OPERATE ON WAREHOUSE sales_intelligence_wh TO ROLE sales_intelligen
 
 -- 3. Create tables for sales data
 USE DATABASE sales_intelligence;
-USE SCHEMA data;
+USE SCHEMA SALES_INTELLIGENCE.DATA;
 
 CREATE TABLE sales_conversations (
     conversation_id VARCHAR,

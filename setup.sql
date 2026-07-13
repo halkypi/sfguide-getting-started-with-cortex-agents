@@ -40,7 +40,7 @@ ALTER USER IDENTIFIER($my_user) SET DEFAULT_ROLE = SALES_INTELLIGENCE_ROLE;
 
 -- 3. Create tables for sales data
 USE DATABASE sales_intelligence;
-USE SCHEMA data;
+USE SCHEMA SALES_INTELLIGENCE.DATA;
 
 CREATE TABLE sales_conversations (
     conversation_id VARCHAR,

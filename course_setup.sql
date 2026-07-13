@@ -1,46 +1,44 @@
--- 1. Create consumer role
-USE ROLE ACCOUNTADMIN;
-CREATE OR REPLACE ROLE sales_intelligence_role;
-GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE sales_intelligence_role;
-SET my_user = CURRENT_USER();
-GRANT ROLE sales_intelligence_role to user IDENTIFIER($my_user);
+   -- 1. Create consumer role and grant necessary permissions
+    USE ROLE ACCOUNTADMIN;
+    CREATE OR REPLACE ROLE sales_intelligence_role;
+    GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE sales_intelligence_role;
+    SET my_user = CURRENT_USER();
+    GRANT ROLE sales_intelligence_role to user IDENTIFIER($my_user);
 
--- 2. Create database, schema, and warehouse
-CREATE OR REPLACE DATABASE sales_intelligence;
-CREATE OR REPLACE SCHEMA sales_intelligence.data;
-GRANT USAGE ON DATABASE sales_intelligence TO ROLE sales_intelligence_role;
-GRANT USAGE ON SCHEMA sales_intelligence.data TO ROLE sales_intelligence_role;
-GRANT CREATE AGENT ON SCHEMA sales_intelligence.data TO ROLE sales_intelligence_role;
+    -- 2. Create database, schema, and warehouse
+    CREATE OR REPLACE DATABASE sales_intelligence;
+    CREATE OR REPLACE SCHEMA sales_intelligence.data;
+    GRANT USAGE ON DATABASE sales_intelligence TO ROLE sales_intelligence_role;
+    GRANT USAGE ON SCHEMA sales_intelligence.data TO ROLE sales_intelligence_role;
 
-CREATE DATABASE IF NOT EXISTS snowflake_intelligence;
-CREATE SCHEMA IF NOT EXISTS snowflake_intelligence.agents;
-GRANT USAGE ON DATABASE snowflake_intelligence TO ROLE sales_intelligence_role;
-GRANT USAGE ON SCHEMA snowflake_intelligence.agents TO ROLE sales_intelligence_role;
+    CREATE DATABASE IF NOT EXISTS snowflake_intelligence;
+    CREATE SCHEMA IF NOT EXISTS snowflake_intelligence.agents;
+    GRANT USAGE ON DATABASE snowflake_intelligence TO ROLE sales_intelligence_role;
+    GRANT USAGE ON SCHEMA snowflake_intelligence.agents TO ROLE sales_intelligence_role;
+    GRANT CREATE AGENT ON SCHEMA snowflake_intelligence.agents TO ROLE sales_intelligence_role;
 
--- Snowflake Intelligence object (account-level container for agent discoverability)
-GRANT CREATE SNOWFLAKE INTELLIGENCE ON ACCOUNT TO ROLE sales_intelligence_role;
-GRANT MODIFY ON SNOWFLAKE INTELLIGENCE SNOWFLAKE_INTELLIGENCE_OBJECT_DEFAULT TO ROLE sales_intelligence_role;
-GRANT USAGE ON SNOWFLAKE INTELLIGENCE SNOWFLAKE_INTELLIGENCE_OBJECT_DEFAULT TO ROLE sales_intelligence_role;
+    -- Grant Cortex Search Service creation
+    GRANT CREATE CORTEX SEARCH SERVICE ON SCHEMA sales_intelligence.data TO ROLE sales_intelligence_role;
 
-CREATE OR REPLACE WAREHOUSE sales_intelligence_wh
-WITH 
-    WAREHOUSE_SIZE = 'SMALL'
-    AUTO_SUSPEND = 3600
-    AUTO_RESUME = TRUE
-    INITIALLY_SUSPENDED = FALSE
-COMMENT = 'Sales intelligence warehouse with 1-hour auto-suspend policy';
-GRANT USAGE, OPERATE ON WAREHOUSE sales_intelligence_wh TO ROLE sales_intelligence_role;
-GRANT SELECT ON ALL TABLES IN SCHEMA SALES_INTELLIGENCE.DATA TO ROLE sales_intelligence_role;
-GRANT SELECT ON FUTURE TABLES IN SCHEMA SALES_INTELLIGENCE.DATA TO ROLE sales_intelligence_role;
-    
--- Warehouse usage
-GRANT USAGE ON WAREHOUSE SALES_INTELLIGENCE_WH TO ROLE SALES_INTELLIGENCE_ROLE;
+    CREATE OR REPLACE WAREHOUSE sales_intelligence_wh
+    WITH
+        WAREHOUSE_SIZE = 'SMALL'
+        AUTO_SUSPEND = 3600
+        AUTO_RESUME = TRUE
+        INITIALLY_SUSPENDED = FALSE
+    COMMENT = 'Sales intelligence warehouse with 1-hour auto-suspend policy';
+    GRANT USAGE, OPERATE ON WAREHOUSE sales_intelligence_wh TO ROLE sales_intelligence_role;
+    GRANT SELECT ON ALL TABLES IN SCHEMA SALES_INTELLIGENCE.DATA TO ROLE sales_intelligence_role;
+    GRANT SELECT ON FUTURE TABLES IN SCHEMA SALES_INTELLIGENCE.DATA TO ROLE sales_intelligence_role;
 
-ALTER USER IDENTIFIER($my_user) SET DEFAULT_ROLE = SALES_INTELLIGENCE_ROLE;
+    -- Warehouse usage
+    GRANT USAGE ON WAREHOUSE SALES_INTELLIGENCE_WH TO ROLE SALES_INTELLIGENCE_ROLE;
+
+    ALTER USER IDENTIFIER($my_user) SET DEFAULT_ROLE = SALES_INTELLIGENCE_ROLE;
 
 -- 3. Create tables for sales data
 USE DATABASE sales_intelligence;
-USE SCHEMA SALES_INTELLIGENCE.DATA;
+USE SCHEMA data;
 
 CREATE TABLE sales_conversations (
     conversation_id VARCHAR,
@@ -118,30 +116,9 @@ VALUES
 
 ALTER TABLE sales_conversations SET CHANGE_TRACKING = TRUE;
 
--- 4. Create the search service
-CREATE OR REPLACE CORTEX SEARCH SERVICE sales_conversation_search
-  ON transcript_text
-  ATTRIBUTES customer_name, deal_stage, sales_rep, product_line, conversation_date, deal_value
-  WAREHOUSE = sales_intelligence_wh
-  TARGET_LAG = '1 hour'
-  AS (
-    SELECT
-        conversation_id,
-        transcript_text,
-        customer_name,
-        deal_stage,
-        sales_rep,
-        conversation_date,
-        deal_value,
-        product_line
-    FROM sales_conversations
-);
-GRANT USAGE ON CORTEX SEARCH SERVICE sales_conversation_search TO ROLE sales_intelligence_role;
-
--- 5. Create Stage
+-- 4. Create Stage
 CREATE OR REPLACE STAGE models DIRECTORY = (ENABLE = TRUE);
 GRANT READ ON STAGE models TO ROLE sales_intelligence_role;
 
+-- 5. Enable cross region inference (required to use claude-4-sonnet)
 ALTER ACCOUNT SET CORTEX_ENABLED_CROSS_REGION = 'AWS_US';
-
-SELECT 'Setup is Complete.' AS status;
